@@ -22,10 +22,13 @@ use crate::{PassClient, PassClientContext};
 use anyhow::{Context, Result, anyhow};
 use muon::GET;
 
-#[derive(serde::Deserialize)]
-pub(crate) struct AliasMailbox {
-    #[serde(rename = "ID")]
+/// A mailbox an alias can forward to, as returned by the alias endpoints.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct AliasMailbox {
+    #[serde(rename(deserialize = "ID"))]
     pub id: i64,
+    #[serde(rename(deserialize = "Email"))]
+    pub email: String,
 }
 
 #[derive(serde::Deserialize)]

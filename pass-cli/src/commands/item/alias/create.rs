@@ -33,11 +33,12 @@ pub async fn run(
     client: PassClient,
     share_query: ShareQuery,
     prefix: String,
+    mailboxes: Vec<String>,
     output: OutputFormat,
 ) -> Result<()> {
     let share_id = share_query.share_id(&client).await?;
     let res = client
-        .create_alias(&share_id, &prefix)
+        .create_alias_with_mailboxes(&share_id, &prefix, &mailboxes)
         .await
         .context("Error creating alias")?;
 
