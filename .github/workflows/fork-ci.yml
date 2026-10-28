@@ -11,6 +11,9 @@ permissions:
   contents: read
 env:
   CARGO_TERM_COLOR: always
+  # Pushing a `fork/release-<tag>` branch tags its head as <tag> and publishes a release
+  # (the tag is created by the workflow, so no tag push is needed).
+  RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (startsWith(github.ref_name, 'fork/release-v') && github.ref_name || '') }}
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -61,7 +64,9 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          name="pass-cli-fork-${GITHUB_REF_NAME//\//-}-${{ matrix.target }}"
+          version="${RELEASE_TAG#fork/release-}"
+          version="${version:-${GITHUB_SHA::7}}"
+          name="pass-cli-fork-$version-${{ matrix.target }}"
           mkdir dist
           cp "target/${{ matrix.target }}/release/pass-cli" "dist/$name"
           cd dist
@@ -74,7 +79,7 @@ jobs:
           path: dist/*
 
   release:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref_name, 'fork/release-v')
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -85,12 +90,18 @@ jobs:
           path: dist
           merge-multiple: true
       - run: cd dist && cat *.sha256 > SHA256SUMS && cat SHA256SUMS
+      - id: tag
+        run: echo "name=${RELEASE_TAG#fork/release-}" >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.tag.outputs.name }}
           prerelease: true
           files: dist/*
           body: |
             Unofficial fork build of pass-cli 2.5.1 with alias mailbox support
             (`item alias create --mailbox`, `item alias update`, mailboxes in `item view`).
             Not affiliated with or supported by Proton. Install under a separate name
-            (e.g. `pass-cli-fork`) and set `PROTON_PASS_NO_UPDATE_CHECK=1`; see FORK.md.
+            (e.g. `pass-cli-fork`) and set `PROTON_PASS_NO_UPDATE_CHECK=1`; see
+            https://github.com/jrokeach/pass-cli/blob/fork/release/FORK.md
