@@ -1,0 +1,57 @@
+# Keeps fork/release rebased on upstream: opens a PR per upstream change, and once Fork CI passes
+# on a cleanly rebased PR branch, moves fork/release to it and tags the matching fork releases.
+# See .github/scripts/upstream-sync.sh and the "Staying current with upstream" section of FORK.md.
+#
+# Needs the FORK_SYNC_TOKEN secret: a token with contents, pull requests and workflows write
+# access to this repository. Scheduled and workflow_run triggers only run from the default
+# branch, so fork/release must be the default branch.
+name: Upstream sync
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Fork CI]
+    types: [completed]
+    branches: ["fork/sync/**"]
+permissions:
+  contents: read
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+env:
+  UPSTREAM_REPO: protonpass/pass-cli
+  UPSTREAM_BRANCH: main
+  MIRROR_BRANCH: main
+  RELEASE_BRANCH: fork/release
+  TAG_SUFFIX: mailbox
+jobs:
+  sync:
+    if: github.event_name != 'workflow_run'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.FORK_SYNC_TOKEN }}
+      - run: .github/scripts/upstream-sync.sh sync
+        env:
+          GH_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+
+  finalize:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.FORK_SYNC_TOKEN }}
+      - run: .github/scripts/upstream-sync.sh finalize "$HEAD_BRANCH" "$HEAD_SHA"
+        env:
+          GH_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}

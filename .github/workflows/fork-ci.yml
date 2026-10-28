@@ -91,7 +91,11 @@ jobs:
           merge-multiple: true
       - run: cd dist && cat *.sha256 > SHA256SUMS && cat SHA256SUMS
       - id: tag
-        run: echo "name=${RELEASE_TAG#fork/release-}" >> "$GITHUB_OUTPUT"
+        run: |
+          name="${RELEASE_TAG#fork/release-}"
+          upstream="${name#v}"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "upstream=${upstream%%-*}" >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.name }}
@@ -100,7 +104,7 @@ jobs:
           prerelease: true
           files: dist/*
           body: |
-            Unofficial fork build of pass-cli 2.5.1 with alias mailbox support
+            Unofficial fork build of pass-cli ${{ steps.tag.outputs.upstream }} with alias mailbox support
             (`item alias create --mailbox`, `item alias update`, mailboxes in `item view`).
             Not affiliated with or supported by Proton. Install under a separate name
             (e.g. `pass-cli-fork`) and set `PROTON_PASS_NO_UPDATE_CHECK=1`; see
