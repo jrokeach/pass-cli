@@ -87,6 +87,7 @@ pub use domain::{ClientFeatures, LocalKeyProvider};
 pub use error::{AnyhowErrorExt, SessionInvalidatedError};
 pub use first_time_setup::FirstTimeSetupKey;
 pub use folder::create::CreateFolderPayload;
+pub use item::alias::{AliasDetails, AliasMailbox};
 pub use item::create::{credit_card, custom, identity, login, note, ssh_key, wifi};
 pub use item::find::FindItemQuery;
 pub use organization::{
