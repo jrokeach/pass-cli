@@ -55,7 +55,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-      - run: cargo build --release --locked -p pass-cli --target ${{ matrix.target }}
+      # The published Cargo.lock lists workspace members missing from the public source, so it
+      # cannot be used with --locked; cargo only prunes those entries.
+      - run: cargo build --release -p pass-cli --target ${{ matrix.target }}
       - name: Package
         shell: bash
         run: |
