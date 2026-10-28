@@ -10,7 +10,8 @@
 #       Run once Fork CI has passed on <sha>, the head of a fork/sync/* branch. Moves
 #       RELEASE_BRANCH to <sha> (GitHub then marks the PR merged) and tags a fork release
 #       v<version>-<TAG_SUFFIX>.1 for each upstream tag the sync brought in. Pushing a tag runs
-#       Fork CI, which builds and publishes the release.
+#       Fork CI, which builds and publishes the release. Then moves each of FEATURE_BRANCHES
+#       to its rebased commits (see update_feature_branches).
 #
 # Pushes need a token that can push workflow files, since the patch stack and upstream both
 # change .github/workflows; the GITHUB_TOKEN can't, and its pushes don't trigger other workflows.
@@ -22,6 +23,9 @@ UPSTREAM_BRANCH=${UPSTREAM_BRANCH:-main}
 MIRROR_BRANCH=${MIRROR_BRANCH:-main}
 RELEASE_BRANCH=${RELEASE_BRANCH:-fork/release}
 TAG_SUFFIX=${TAG_SUFFIX:-mailbox}
+# Space-separated branches holding the upstreamable part of the patch stack: each one's commits
+# sit at the bottom of RELEASE_BRANCH, with the fork-only commits on top.
+FEATURE_BRANCHES=${FEATURE_BRANCHES:-}
 SYNC_PREFIX=fork/sync/
 LABEL=upstream-sync
 CONFLICT_LABEL=upstream-sync-conflict
@@ -86,6 +90,34 @@ mirror_upstream() {
     git fetch --quiet --tags origin
     echo "Mirrored ${#refspecs[@]} upstream tags"
   fi
+}
+
+# Moves each feature branch to the copy of its commits in the rebased stack, so it stays
+# upstream's tip plus the feature alone. A branch's commits are the first N commits of
+# <base>..<release>; the rebased copies are the first N of <target>..<sha>, checked by subject.
+# Prints the branches it moved.
+update_feature_branches() {
+  local base=$1 release=$2 target=$3 sha=$4 feature old n new
+  for feature in $FEATURE_BRANCHES; do
+    old=$(git rev-parse --quiet --verify "origin/$feature") || {
+      echo "::warning::Feature branch $feature doesn't exist; skipping it" >&2
+      continue
+    }
+    if ! git merge-base --is-ancestor "$old" "$release" || ! git merge-base --is-ancestor "$base" "$old"; then
+      echo "::warning::$feature isn't the bottom of $RELEASE_BRANCH's patch stack; not moving it" >&2
+      continue
+    fi
+    n=$(git rev-list --count "$base..$old")
+    ((n)) || continue
+    new=$(git rev-list --reverse "$target..$sha" | sed -n "${n}p")
+    if [[ -z $new ]] || [[ $(git log --format=%s "$base..$old") != $(git log --format=%s "$target..$new") ]]; then
+      echo "::warning::Couldn't find $feature's commits in the rebased $RELEASE_BRANCH (a patch was dropped or reworded?); not moving it" >&2
+      continue
+    fi
+    git push --quiet --force-with-lease="refs/heads/$feature:$old" origin "$new:refs/heads/$feature"
+    echo "Moved $feature to $(short "$new")" >&2
+    echo "$feature"
+  done
 }
 
 cmd_sync() {
@@ -268,6 +300,9 @@ cmd_finalize() {
     echo "Tagged $tag"
   done
 
+  local features
+  features=$(update_feature_branches "$base" "$release" "$target" "$sha")
+
   local state=
   for _ in 1 2 3 4 5 6; do
     state=$("${GH[@]}" pr view "$number" --json state --jq .state)
@@ -277,6 +312,9 @@ cmd_finalize() {
   local note="\`$RELEASE_BRANCH\` now points at $(short "$sha")."
   if ((${#tagged[@]})); then
     note+=" Tagged ${tagged[*]}; Fork CI builds and publishes the release."
+  fi
+  if [[ -n $features ]]; then
+    note+=" Rebased $(sed 's/.*/`&`/' <<<"$features" | paste -sd' ') onto upstream $(short "$target")."
   fi
   if [[ $state == MERGED ]]; then
     "${GH[@]}" pr comment "$number" --body "$note"

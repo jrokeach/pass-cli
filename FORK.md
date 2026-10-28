@@ -77,9 +77,15 @@ every 6 hours, or on demand from the Actions tab:
 2. Fork CI runs on that branch. When it passes, the workflow moves `fork/release` to the
    branch, which GitHub shows as the PR being merged, and pushes `v<version>-mailbox.1` for
    each new upstream release tag. Fork CI then builds and publishes those releases.
+   It also moves `feat/alias-mailboxes` to the rebased feature commit, so that branch stays
+   upstream's tip plus the feature alone, ready to offer upstream.
 3. If the rebase conflicts, the PR is a draft labeled `upstream-sync-conflict` with the steps
    to resolve it. Push the resolved rebase to the PR branch and step 2 runs on it. Don't use
    the merge button on sync PRs.
+
+Keep the patch stack ordered: feature commits (the ones on `feat/alias-mailboxes`) first, then
+the fork-only commits (CI, `FORK.md`, the `Cargo.toml` workspace change). Never mix the two in
+one commit.
 
 Setup:
 

@@ -25,6 +25,8 @@ env:
   MIRROR_BRANCH: main
   RELEASE_BRANCH: fork/release
   TAG_SUFFIX: mailbox
+  # Kept as upstream's tip plus only the feature commits, ready to offer upstream.
+  FEATURE_BRANCHES: feat/alias-mailboxes
 jobs:
   sync:
     if: github.event_name != 'workflow_run'
