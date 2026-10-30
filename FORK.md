@@ -76,7 +76,9 @@ every 6 hours, or on demand from the Actions tab:
    upstream's tip and opens a PR from `fork/sync/<sha>` into `fork/release`.
 2. Fork CI runs on that branch. When it passes, the workflow moves `fork/release` to the
    branch, which GitHub shows as the PR being merged, and pushes `v<version>-mailbox.1` for
-   each new upstream release tag. Fork CI then builds and publishes those releases.
+   each new upstream release tag. Fork CI then builds and publishes those releases with the
+   Linux binary, and Fork CI (macOS) adds the macOS binary when it finishes. The macOS build
+   doesn't hold up syncs or releases; if macOS runners are unavailable, re-run it later.
    It also moves `feat/alias-mailboxes` to the rebased feature commit, so that branch stays
    upstream's tip plus the feature alone, ready to offer upstream.
 3. If the rebase conflicts, the PR is a draft labeled `upstream-sync-conflict` with the steps
