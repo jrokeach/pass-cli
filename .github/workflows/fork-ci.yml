@@ -1,4 +1,6 @@
-# Fork-only workflow: checks, tests and release binaries for the alias-mailboxes fork.
+# Fork-only workflow: checks, tests, the Linux binary and the release for the alias-mailboxes
+# fork. The macOS binary is built by Fork CI (macOS), which adds it to the release, so a shortage
+# of macOS runners doesn't block this workflow (or the upstream sync that waits on it).
 name: Fork CI
 on:
   push:
@@ -41,42 +43,10 @@ jobs:
 
   build:
     needs: check
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: macos-latest
-            target: aarch64-apple-darwin
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-      # The published Cargo.lock lists workspace members missing from the public source, so it
-      # cannot be used with --locked; cargo only prunes those entries.
-      - run: cargo build --release -p pass-cli --target ${{ matrix.target }}
-      - name: Package
-        shell: bash
-        run: |
-          version="${RELEASE_TAG#fork/release-}"
-          version="${version:-${GITHUB_SHA::7}}"
-          name="pass-cli-fork-$version-${{ matrix.target }}"
-          mkdir dist
-          cp "target/${{ matrix.target }}/release/pass-cli" "dist/$name"
-          cd dist
-          shasum -a 256 "$name" > "$name.sha256"
-          cat "$name.sha256"
-          "./$name" --version
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.target }}
-          path: dist/*
+    uses: ./.github/workflows/fork-build.yml
+    with:
+      os: ubuntu-latest
+      target: x86_64-unknown-linux-gnu
 
   release:
     if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref_name, 'fork/release-v')
@@ -109,3 +79,6 @@ jobs:
             Not affiliated with or supported by Proton. Install under a separate name
             (e.g. `pass-cli-fork`) and set `PROTON_PASS_NO_UPDATE_CHECK=1`; see
             https://github.com/jrokeach/pass-cli/blob/fork/release/FORK.md
+
+            The macOS (aarch64-apple-darwin) binary is built separately and can appear after the
+            Linux one.
