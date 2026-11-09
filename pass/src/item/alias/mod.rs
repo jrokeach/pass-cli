@@ -17,5 +17,6 @@
  *
  */
 
+pub mod contact;
 pub mod create;
 mod options;
