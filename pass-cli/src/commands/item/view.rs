@@ -25,8 +25,25 @@ use crate::commands::{OutputFormat, settings_helper};
 use crate::helpers::CliPassClient as PassClient;
 use crate::telemetry::event::CommandEvent;
 use anyhow::{Context, Result, anyhow, bail};
-use pass::FindItemQuery;
-use pass::domain::{EventAction, Field};
+use pass::domain::{EventAction, Field, ItemContent};
+use pass::{AliasMailbox, FindItemQuery};
+
+/// Name of the read-only field that lists the mailboxes of an alias item.
+const ALIAS_MAILBOXES_FIELD: &str = "mailboxes";
+
+#[derive(serde::Serialize)]
+struct JsonAlias {
+    email: String,
+    mailboxes: Vec<AliasMailbox>,
+}
+
+#[derive(serde::Serialize)]
+struct JsonItemView<'a, T> {
+    #[serde(flatten)]
+    item: &'a T,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    alias: Option<JsonAlias>,
+}
 
 pub enum ViewItemQuery {
     Ids {
@@ -138,6 +155,8 @@ pub async fn run(
         }
     };
 
+    let is_alias = matches!(item.item.content.content, ItemContent::Alias(_));
+
     if let Some(field) = effective_field {
         match item.item.get_field(&field) {
             Some(Field::Totp(totp_uri)) => {
@@ -149,13 +168,41 @@ pub async fn run(
                 println!("{}", value);
             }
             Some(field_value) => println!("{}", field_value.value()),
+            None if is_alias && field.eq_ignore_ascii_case(ALIAS_MAILBOXES_FIELD) => {
+                let details = client
+                    .get_alias_details(&item.item.share_id, &item.item.id)
+                    .await
+                    .context("Error retrieving alias mailboxes")?;
+                for mailbox in details.mailboxes {
+                    println!("{}", mailbox.email);
+                }
+            }
             None => bail!("Field does not exist: {}", field),
         }
     } else {
+        let alias = if is_alias {
+            match client
+                .get_alias_details(&item.item.share_id, &item.item.id)
+                .await
+            {
+                Ok(details) => Some(JsonAlias {
+                    email: details.email,
+                    mailboxes: details.mailboxes,
+                }),
+                Err(e) => {
+                    eprintln!("Warning: could not retrieve alias mailboxes: {e:#}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         match output {
             OutputFormat::Json => {
+                let view = JsonItemView { item: &item, alias };
                 let as_json =
-                    serde_json::to_string_pretty(&item).context("Error serializing item")?;
+                    serde_json::to_string_pretty(&view).context("Error serializing item")?;
                 println!("{as_json}");
             }
             OutputFormat::Human => {
@@ -170,6 +217,13 @@ pub async fn run(
                 let content = item.item.content.pretty_print();
                 if !content.is_empty() {
                     println!("{}", content);
+                    println!("------");
+                }
+                if let Some(alias) = &alias {
+                    println!("- Alias: {}", alias.email);
+                    for mailbox in &alias.mailboxes {
+                        println!("- Mailbox: {}", mailbox.email);
+                    }
                     println!("------");
                 }
                 if !item.attachments.is_empty() {

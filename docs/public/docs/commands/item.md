@@ -415,7 +415,14 @@ pass-cli item get --share-id "abc123def" --item-id "item456"
 
 # Using the 'show' alias
 pass-cli item show --vault-name "MyVault" --item-title "MyItem"
+
+# List the mailboxes an alias forwards to (one per line)
+pass-cli item view --share-id "abc123def" --item-id "alias789" --field mailboxes
 ```
+
+**Alias items:**
+
+For alias items, `view` also shows the alias address and the mailboxes it forwards to: as `- Alias:` and `- Mailbox:` lines in human output, and as an `alias` object (`email`, and `mailboxes` with each mailbox's `id` and `email`) in JSON output. The read-only `mailboxes` field (`--field mailboxes` or `pass://SHARE_ID/ITEM_ID/mailboxes`) prints the mailbox addresses, one per line. A custom field named `mailboxes` on the item takes precedence.
 
 ### update
 
@@ -660,6 +667,7 @@ pass-cli item alias create [OPTIONS]
 - `--share-id SHARE_ID` - Share ID of the vault where the alias will be created
 - `--vault-name VAULT_NAME` - Name of the vault where the alias will be created
 - `--prefix PREFIX` - Prefix of the alias. The resulting email will be `[prefix].[suffix]` (required)
+- `--mailbox MAILBOX` - Mailbox the alias forwards to, as the mailbox email address (case-insensitive) or its numeric mailbox ID. Repeat to forward to several mailboxes. If omitted, the alias forwards to the account's default mailbox. An unknown mailbox fails with the list of valid mailboxes, and no alias is created.
 - `--output FORMAT` - Output format: `human` or `json`. Uses default format from settings if not specified.
 
 **Mutually exclusive options:**
@@ -680,6 +688,44 @@ pass-cli item alias create --vault-name "Personal" --prefix "work-signup"
 
 # Create alias with JSON output
 pass-cli item alias create --vault-name "Personal" --prefix "temp" --output json
+
+# Create alias that forwards to two mailboxes
+pass-cli item alias create --prefix "shop" \
+  --mailbox owner@example.com --mailbox second-inbox@example.com
+```
+
+#### alias update
+
+Change the mailboxes an existing alias forwards to. The given mailboxes replace the current ones; other alias properties are left untouched.
+
+```bash
+pass-cli item alias update [OPTIONS] --mailbox <MAILBOX>
+```
+
+**Options:**
+
+- `--share-id SHARE_ID` - Share ID of the vault containing the alias
+- `--vault-name VAULT_NAME` - Name of the vault containing the alias
+- `--item-id ITEM_ID` - ID of the alias item
+- `--item-title ITEM_TITLE` - Title of the alias item
+- `--mailbox MAILBOX` - Mailbox the alias forwards to, as the mailbox email address or its numeric mailbox ID. Repeat to forward to several mailboxes (at least one required). An unknown mailbox fails with the list of valid mailboxes, and the alias is not changed.
+- `--output FORMAT` - Output format: `human` or `json`
+
+**Mutually exclusive options:**
+
+- `--share-id` and `--vault-name` are mutually exclusive. You can provide one, or neither if a default vault is configured.
+- `--item-id` and `--item-title` are mutually exclusive. You must provide exactly one.
+
+**Examples:**
+
+```bash
+# Forward an alias to two mailboxes
+pass-cli item alias update --share-id "abc123def" --item-id "alias789" \
+  --mailbox owner@example.com --mailbox second-inbox@example.com
+
+# Forward an alias back to a single mailbox
+pass-cli item alias update --vault-name "Personal" --item-title "Alias for shop" \
+  --mailbox owner@example.com
 ```
 
 ## Login template format
