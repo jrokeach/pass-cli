@@ -17,6 +17,7 @@
  *
  */
 
+mod contact;
 mod create;
 
 use crate::commands::OutputFormat;
@@ -42,6 +43,18 @@ pub enum AliasCommands {
         #[arg(long, help = "Output format", default_value = "human")]
         output: OutputFormat,
     },
+    #[command(
+        about = "Manage the contacts of an alias and their reverse aliases",
+        long_about = "Manage the contacts of an alias and their reverse aliases.\n\n\
+                      A contact is a recipient attached to one alias. Each contact has a reverse \
+                      alias: an address you send to, which delivers your email to the contact as \
+                      if it came from the alias. Use it to start a conversation from an alias, or \
+                      to reply without exposing your real mailbox."
+    )]
+    Contact {
+        #[command(subcommand)]
+        contact_command: contact::ContactCommands,
+    },
 }
 
 pub async fn run(subcommand: AliasCommands, client: PassClient) -> Result<()> {
@@ -62,5 +75,6 @@ pub async fn run(subcommand: AliasCommands, client: PassClient) -> Result<()> {
             let share_query = ShareQuery::new(share_id, vault_name)?;
             create::run(client, share_query, prefix, output).await
         }
+        AliasCommands::Contact { contact_command } => contact::run(contact_command, client).await,
     }
 }
