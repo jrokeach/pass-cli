@@ -1,0 +1,115 @@
+# Fork-only workflow for the integration branches `next`, `next-*` (alias mailboxes + alias contacts):
+# checks and tests on every push to `next`, release binaries for Linux x86_64, Linux arm64 and
+# macOS arm64, and on a `v*-next.*` tag a prerelease with the binaries and SHA256SUMS.
+# The macOS binary is added to the release when it is ready, so a shortage of macOS runners
+# never holds up the Linux release.
+name: Next CI
+on:
+  push:
+    branches:
+      - next
+      - "next-*"
+    tags:
+      - "v*-next.*"
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: rustfmt (fork modules)
+        run: |
+          rustfmt --edition 2024 --check \
+            pass/src/item/alias/mod.rs \
+            pass/src/item/alias/contact.rs \
+            pass-cli/src/commands/item/alias/mod.rs \
+            pass-cli/src/commands/item/alias/contact.rs \
+            pass-cli/src/commands/item/view.rs
+      - name: cargo fmt --all --check (informational, upstream sources reference unpublished modules)
+        continue-on-error: true
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy -p pass -p pass-cli --all-targets -- -D warnings
+      - name: cargo test (pass)
+        run: cargo test -p pass
+      - name: cargo test (pass-cli)
+        run: cargo test -p pass-cli
+
+  build-linux:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+    uses: ./.github/workflows/fork-build.yml
+    with:
+      os: ${{ matrix.os }}
+      target: ${{ matrix.target }}
+
+  build-macos:
+    needs: check
+    uses: ./.github/workflows/fork-build.yml
+    with:
+      os: macos-latest
+      target: aarch64-apple-darwin
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build-linux
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*-linux-gnu"
+          path: dist
+          merge-multiple: true
+      - run: cd dist && cat *.sha256 > SHA256SUMS && cat SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ github.ref_name }}
+          prerelease: true
+          files: dist/*
+          body_path: .github/next-release-notes.md
+
+  release-macos:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-macos, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: aarch64-apple-darwin
+          path: dist
+      - name: Add to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          cd dist
+          gh release download "$tag" --pattern SHA256SUMS --clobber
+          cat SHA256SUMS *.sha256 | sort -u -k2 > SHA256SUMS.new
+          mv SHA256SUMS.new SHA256SUMS
+          cat SHA256SUMS
+          gh release upload "$tag" ./* --clobber
