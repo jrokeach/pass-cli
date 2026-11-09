@@ -728,6 +728,100 @@ pass-cli item alias update --vault-name "Personal" --item-title "Alias for shop"
   --mailbox owner@example.com
 ```
 
+#### alias contact
+
+Manage the contacts of an alias. A contact is a recipient attached to one alias (contacts are not shared between aliases). For each contact, Proton generates a **reverse alias**: a unique address you send to, which delivers your email to the contact as if it came from the alias. This is how you start a conversation from an alias, or reply without exposing your real mailbox.
+
+All `alias contact` subcommands select the alias the same way:
+
+- `--share-id SHARE_ID` - Share ID of the vault containing the alias
+- `--vault-name VAULT_NAME` - Name of the vault containing the alias
+- `--item-id ITEM_ID` - ID of the alias item
+- `--item-title ITEM_TITLE` - Title of the alias item
+- `--output FORMAT` - Output format: `human` or `json` (default `human`)
+
+`--share-id` and `--vault-name` are mutually exclusive (provide neither to use the default vault). `--item-id` and `--item-title` are mutually exclusive, and one of them is required. The item must be an alias.
+
+##### alias contact create
+
+Create a contact and print its reverse alias.
+
+```bash
+pass-cli item alias contact create [OPTIONS] --contact <EMAIL>
+```
+
+- `--contact EMAIL` - Email address of the recipient (required). It is checked to be a valid bare address before calling the API.
+- `--name NAME` - Display name of the contact
+
+The command is idempotent: if the alias already has a contact for this email (compared case-insensitively), the existing contact and reverse alias are returned and nothing is created. Human output prints the reverse alias address on the first line. JSON output:
+
+```json
+{
+  "item_id": "alias789",
+  "alias": "alias.example@passmail.net",
+  "contact_id": 12,
+  "contact": "recipient@example.com",
+  "name": null,
+  "reverse_alias_address": "recipient_at_example_com_abcd@passmail.net",
+  "blocked": false,
+  "create_time": 1700000000,
+  "existed": false
+}
+```
+
+`reverse_alias_address` is the address to send to. A `reverse_alias` field, the reverse alias in `Name <address>` form, is only present when the API returns it in that form (it currently returns a bare address).
+
+##### alias contact list
+
+List the contacts of an alias.
+
+```bash
+pass-cli item alias contact list [OPTIONS]
+```
+
+Human output prints one line per contact: `- CONTACT -> REVERSE_ALIAS_ADDRESS (ID N)`, followed by `[blocked]` for blocked contacts. JSON output is an object with `item_id`, `alias` and `contacts`, an array of contacts with the fields above (without `existed`) plus the 14-day counters `forwarded_emails`, `replied_emails` and `blocked_emails`. The list also includes contacts that were not created with this command, such as contacts created in the Proton Pass apps.
+
+##### alias contact delete, block, allow
+
+```bash
+pass-cli item alias contact delete [OPTIONS] (--contact <EMAIL> | --contact-id <ID>)
+pass-cli item alias contact block [OPTIONS] (--contact <EMAIL> | --contact-id <ID>)
+pass-cli item alias contact allow [OPTIONS] (--contact <EMAIL> | --contact-id <ID>)
+```
+
+- `delete` removes the contact, and with it its reverse alias. JSON output is the deleted contact with `"deleted": true`.
+- `block` stops the emails the contact sends to the alias from reaching your mailboxes; `allow` lets them through again. JSON output is the updated contact.
+
+**Agent sessions:**
+
+`alias contact` follows the rules of the other item commands: `PROTON_PASS_AGENT_REASON` must be set. `list` is recorded as an item read; `create` as an item update, or as an item read when the contact already existed; `delete`, `block` and `allow` as item updates. If the API refuses an agent or personal access token session, the error says so explicitly and includes the HTTP status, the API error code and message.
+
+**Examples:**
+
+```bash
+# Create a contact and get the reverse alias to write to
+pass-cli item alias contact create --vault-name "Personal" --item-title "Shopping alias" \
+  --contact recipient@example.com --name "Recipient"
+
+# The same, with JSON output for scripts
+pass-cli item alias contact create --share-id "abc123def" --item-id "alias789" \
+  --contact recipient@example.com --output json
+
+# List the contacts of an alias
+pass-cli item alias contact list --share-id "abc123def" --item-id "alias789"
+
+# Block a contact, then allow it again
+pass-cli item alias contact block --share-id "abc123def" --item-id "alias789" --contact recipient@example.com
+pass-cli item alias contact allow --share-id "abc123def" --item-id "alias789" --contact-id 12
+
+# Delete a contact
+pass-cli item alias contact delete --share-id "abc123def" --item-id "alias789" --contact-id 12
+
+# As an agent
+PROTON_PASS_AGENT_REASON="Starting a conversation with a seller" pass-cli item alias contact create \
+  --vault-name "Agent vault" --item-title "Shopping alias" --contact recipient@example.com --output json
+```
+
 ## Login template format
 
 When using `--get-template` or `--from-template`, the JSON structure is:
