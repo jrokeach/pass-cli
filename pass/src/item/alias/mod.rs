@@ -18,4 +18,8 @@
  */
 
 pub mod create;
+mod details;
 mod options;
+
+pub use details::AliasDetails;
+pub use options::AliasMailbox;
