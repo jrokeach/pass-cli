@@ -17,7 +17,7 @@
  *
  */
 
-mod alias;
+pub(crate) mod alias;
 pub mod bulk;
 pub(crate) mod create;
 mod delete;
